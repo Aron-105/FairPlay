@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseCsv } from "@/lib/fairplay/parseCsv";
 
 export async function POST(req: Request) {
   const formData = await req.formData();
@@ -10,19 +11,34 @@ export async function POST(req: Request) {
 
   const playlists = [];
 
+  const likedUris = new Set<string>();
+
+  // First pass: detect liked playlist
+  for (const file of files) {
+    if (file.name.includes("Liked")) {
+      const content = await file.text();
+      const rows = content.split("\n").filter((r) => r.trim() !== "");
+      const headers = rows[0].split(",");
+      const uriIndex = headers.findIndex((h) => h.trim() === "Track URI");
+
+      if (uriIndex !== -1) {
+        for (let i = 1; i < rows.length; i++) {
+          const cols = rows[i].split(",");
+          const uri = cols[uriIndex]?.trim();
+          if (uri) likedUris.add(uri);
+        }
+      }
+    }
+  }
+
+  // Second pass: parse all playlists
   for (const file of files) {
     if (!file.name.endsWith(".csv")) continue;
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const content = await file.text();
+    const playlistName = file.name.replace(".csv", "");
 
-    const content = buffer.toString("utf-8");
-    const rows = content.split("\n").filter((row) => row.trim() !== "");
-
-    playlists.push({
-      name: file.name.replace(".csv", ""),
-      trackCount: Math.max(rows.length - 1, 0),
-    });
+    playlists.push(parseCsv(playlistName, content, likedUris, true));
   }
 
   return NextResponse.json({ playlists });

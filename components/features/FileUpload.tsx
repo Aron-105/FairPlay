@@ -8,9 +8,7 @@ export default function FileUpload() {
   const [files, setFiles] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [playlists, setPlaylists] = useState<
-    { name: string; trackCount: number }[]
-  >([]);
+  const [playlists, setPlaylists] = useState<any[]>([]);
 
   useEffect(() => {
     if (playlists.length > 0) {

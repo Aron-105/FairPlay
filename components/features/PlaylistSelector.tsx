@@ -2,21 +2,19 @@
 
 import { useRef, useState } from "react";
 import Summary from "./Summary";
+import { Playlist as FullPlaylist } from "@/lib/fairplay/types";
 
-interface Playlist {
-  name: string;
-  trackCount: number;
+interface PlaylistSelectorProps {
+  playlists: FullPlaylist[];
 }
 
-export default function PlaylistSelector({
-  playlists,
-}: {
-  playlists: Playlist[];
-}) {
+export default function PlaylistSelector({ playlists }: PlaylistSelectorProps) {
   const [settings, setSettings] = useState(
     playlists.map((p) => ({
-      ...p,
+      name: p.name,
+      trackCount: p.songs.length,
       included: true,
+      useLength: true,
     })),
   );
 
@@ -36,10 +34,15 @@ export default function PlaylistSelector({
   const handleConfirm = async () => {
     const selectedPlaylists = settings
       .filter((p) => p.included)
-      .map((p) => ({
-        name: p.name,
-        useLength: p.trackCount >= minSongsThreshold,
-      }));
+      .map((p) => {
+        const full = playlists.find((pl) => pl.name === p.name);
+
+        return {
+          ...full,
+          useLength: p.trackCount >= minSongsThreshold,
+        };
+      })
+      .filter(Boolean);
 
     if (selectedPlaylists.length === 0) return;
 
@@ -53,10 +56,14 @@ export default function PlaylistSelector({
 
     setIsProcessing(false);
 
-    if (!res.ok) return alert("Something went wrong.");
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(text);
+      alert("Something went wrong.");
+      return;
+    }
 
     const data = await res.json();
-
     setJobId(data.jobId);
     setResult(data);
 
@@ -345,7 +352,8 @@ export default function PlaylistSelector({
               </div>
 
               <div className="text-xs text-neutral-500 max-w-xs">
-                Toggle playlists and adjust the threshold to see how it impacts the final mix.
+                Toggle playlists and adjust the threshold to see how it impacts
+                the final mix.
               </div>
             </div>
           </div>

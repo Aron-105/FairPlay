@@ -1,66 +1,27 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-
-import { parseCsv, mergePlaylists, generateCsv } from "@/lib/fairplay";
-
-import { saveJob } from "@/lib/store/jobStore";
+import { mergePlaylists } from "@/lib/fairplay/mergePlaylists";
+import { generateCsv } from "@/lib/fairplay/generateCsv";
 import crypto from "crypto";
+import { saveJob } from "@/lib/store/jobStore";
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { playlists: config } = body;
+  const { playlists } = body;
 
-  const uploadDir = path.join(process.cwd(), "uploads");
-  const files = fs.readdirSync(uploadDir);
-
-  const likedFile = files.find((f) => f.includes("Liked"));
-
-  console.log("Detected liked file:", likedFile);
+  if (!playlists || playlists.length === 0) {
+    return NextResponse.json(
+      { error: "No playlists provided" },
+      { status: 400 }
+    );
+  }
 
   const likedUris = new Set<string>();
 
-  if (likedFile) {
-    const content = fs.readFileSync(path.join(uploadDir, likedFile), "utf-8");
-
-    const rows = content.split("\n").filter((r) => r.trim() !== "");
-    const headers = rows[0].split(",");
-
-    const uriIndex = headers.findIndex((h) => h.trim() === "Track URI");
-
-    if (uriIndex === -1) {
-      console.error("Track URI column not found in liked file");
-    } else {
-      for (let i = 1; i < rows.length; i++) {
-        const cols = rows[i].split(",");
-        const uri = cols[uriIndex]?.trim();
-        if (uri) likedUris.add(uri);
-      }
-    }
-  }
-
-  console.log("Total liked URIs:", likedUris.size);
-
-  const playlists = [];
-
-  const playlistFiles = files.filter((f) => f !== likedFile);
-
-  for (const file of playlistFiles) {
-    const playlistName = file.replace(".csv", "");
-
-    const configEntry = config.find((p: any) => p.name === playlistName);
-
-    if (!configEntry) continue; // skip unselected playlists
-    const content = fs.readFileSync(path.join(uploadDir, file), "utf-8");
-
-    const useLength =
-      config.find((p: any) => p.name === file.replace(".csv", ""))?.useLength ??
-      true;
-
-    playlists.push(
-      parseCsv(file.replace(".csv", ""), content, likedUris, useLength),
-    );
-  }
+  playlists.forEach((p: any) => {
+    p.songs.forEach((s: any) => {
+      if (s.isLiked) likedUris.add(s.trackUri);
+    });
+  });
 
   const finalSongs = mergePlaylists(playlists, likedUris);
 
@@ -68,10 +29,8 @@ export async function POST(req: Request) {
 
   saveJob(jobId, finalSongs);
 
-  const csv = generateCsv(finalSongs);
-
   return NextResponse.json({
     jobId,
-    songCount: finalSongs.length,
+    finalCount: finalSongs.length,
   });
 }
