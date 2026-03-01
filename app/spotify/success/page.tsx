@@ -1,11 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
-export default function SpotifySuccess() {
+function SuccessContent() {
   const searchParams = useSearchParams();
   const status = searchParams.get("status");
-
   const success = status === "success";
 
   return (
@@ -15,11 +16,12 @@ export default function SpotifySuccess() {
           ? "Playlist successfully added to Spotify!"
           : "Something went wrong."}
       </h1>
+
       <h2 className="text-lg text-neutral-400">
         {success
           ? "Disclaimer: You will need to add local files to Spotify manually if you have any."
           : ""}
-        </h2>
+      </h2>
 
       <div className="space-x-4">
         {success && (
@@ -32,10 +34,18 @@ export default function SpotifySuccess() {
           </a>
         )}
 
-        <a href="/" className="border border-white px-6 py-3 rounded-xl">
+        <Link href="/" className="border border-white px-6 py-3 rounded-xl">
           Make Another Playlist
-        </a>
+        </Link>
       </div>
     </div>
+  );
+}
+
+export default function SpotifySuccess() {
+  return (
+    <Suspense fallback={null}>
+      <SuccessContent />
+    </Suspense>
   );
 }
