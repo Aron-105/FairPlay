@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getJob, deleteJob } from "@/lib/store/jobStore";
+import { kv } from "@vercel/kv";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -7,19 +7,30 @@ export async function GET(req: Request) {
   const code = searchParams.get("code");
   const state = searchParams.get("state");
 
-  const parsedState = state ? JSON.parse(decodeURIComponent(state)) : null;
-
-  const jobId = parsedState?.jobId;
-  const playlistName = parsedState?.playlistName;
-
-  if (!code || !jobId) {
+  if (!code || !state) {
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=error`,
     );
   }
 
+  const stored = await kv.get<{
+    playlistName: string;
+    trackUris: string[];
+  }>(`oauth:${state}`);
+
+  if (!stored) {
+    console.error("Missing stored OAuth payload");
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=error`,
+    );
+  }
+
+  await kv.del(`oauth:${state}`);
+
+  const { playlistName, trackUris } = stored;
+
   try {
-    // 1️⃣ Exchange code for access token
+    // Exchange code
     const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
       method: "POST",
       headers: {
@@ -42,31 +53,8 @@ export async function GET(req: Request) {
 
     if (!accessToken) throw new Error("Token exchange failed");
 
-    console.log("Token response:", tokenData);
-
-    // 2️⃣ Get current user
-    const meRes = await fetch("https://api.spotify.com/v1/me", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    const me = await meRes.json();
-    const userId = me.id;
-
-    console.log("User ID:", userId);
-
-    // 3️⃣ Retrieve stored songs
-    const songs = getJob(jobId);
-    if (!songs) throw new Error("Job expired");
-
-    const trackUris = songs
-      .map((s: any) => s.trackUri)
-      .filter(
-        (uri: string | undefined) =>
-          typeof uri === "string" && uri.startsWith("spotify:track:"),
-      );
-
-    // 4️⃣ Create playlist (USE /me/playlists)
-    const playlistRes = await fetch(`https://api.spotify.com/v1/me/playlists`, {
+    // Create playlist
+    const playlistRes = await fetch("https://api.spotify.com/v1/me/playlists", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -81,55 +69,34 @@ export async function GET(req: Request) {
 
     const playlistData = await playlistRes.json();
 
-    if (!playlistRes.ok) {
-      console.error("Playlist creation failed:", playlistData);
+    if (!playlistRes.ok || !playlistData.id) {
       throw new Error("Failed to create playlist");
     }
 
     const playlistId = playlistData.id;
 
-    if (!playlistId) {
-      throw new Error("No playlist ID returned");
-    }
+    const validUris = trackUris.filter(
+      (uri) => typeof uri === "string" && uri.startsWith("spotify:track:"),
+    );
 
-    // 5️⃣ Add tracks in batches of 100
-
-    console.log("Total tracks:", trackUris.length);
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    for (let i = 0; i < trackUris.length; i += 100) {
-      const batch = trackUris.slice(i, i + 100);
-
-      console.log("Adding batch of size:", batch.length);
-
-      const addRes = await fetch(
-        `https://api.spotify.com/v1/playlists/${playlistId}/items`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ uris: batch }),
+    for (let i = 0; i < validUris.length; i += 100) {
+      await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
         },
-      );
-
-      if (!addRes.ok) {
-        const error = await addRes.json();
-        console.error("Failed to add tracks:", error);
-        throw new Error("Track upload failed");
-      }
+        body: JSON.stringify({
+          uris: validUris.slice(i, i + 100),
+        }),
+      });
     }
-
-    deleteJob(jobId);
 
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=success`,
     );
   } catch (err) {
     console.error("Spotify error:", err);
-
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=error`,
     );

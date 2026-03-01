@@ -19,7 +19,6 @@ export default function PlaylistSelector({ playlists }: PlaylistSelectorProps) {
   );
 
   const [minSongsThreshold, setMinSongsThreshold] = useState(100);
-  const [jobId, setJobId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<any | null>(null);
 
@@ -64,7 +63,6 @@ export default function PlaylistSelector({ playlists }: PlaylistSelectorProps) {
     }
 
     const data = await res.json();
-    setJobId(data.jobId);
     setResult(data);
 
     setTimeout(() => {
@@ -370,9 +368,9 @@ export default function PlaylistSelector({ playlists }: PlaylistSelectorProps) {
           </button>
         </div>
 
-        {jobId && result && (
+        {result && (
           <div ref={summaryRef}>
-            <Summary jobId={jobId} result={result} />
+            <Summary result={result} />
           </div>
         )}
       </div>

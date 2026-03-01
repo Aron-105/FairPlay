@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { generateCsv } from "@/lib/fairplay/generateCsv";
 
 interface PlaylistBreakdown {
   name: string;
@@ -9,19 +10,13 @@ interface PlaylistBreakdown {
 }
 
 interface SummaryProps {
-  jobId: string;
   result: {
+    finalSongs: any[];
     finalCount: number;
-    cappedCount: number;
-    totalBeforeCap: number;
-    contributionPerLarge: number;
-    playlistBreakdown: PlaylistBreakdown[];
-    likedAdded?: number;
-    duplicatesRemoved?: number;
   };
 }
 
-export default function Summary({ jobId, result }: SummaryProps) {
+export default function Summary({ result }: SummaryProps) {
   const [playlistName, setPlaylistName] = useState("");
 
   const baseName = playlistName.trim() || "My Playlist";
@@ -56,14 +51,17 @@ export default function Summary({ jobId, result }: SummaryProps) {
         <button
           className="flex-1 rounded-xl bg-green-500 py-3 font-medium text-black hover:bg-green-400 transition"
           onClick={async () => {
-            const res = await fetch(`/api/fairplay/download?jobId=${jobId}`);
-            const blob = await res.blob();
-            const url = window.URL.createObjectURL(blob);
+            const csv = generateCsv(result.finalSongs);
+
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+
             const a = document.createElement("a");
             a.href = url;
             a.download = csvFileName;
             a.click();
-            window.URL.revokeObjectURL(url);
+
+            URL.revokeObjectURL(url);
           }}
         >
           Download CSV
@@ -71,10 +69,34 @@ export default function Summary({ jobId, result }: SummaryProps) {
 
         <button
           className="flex-1 rounded-xl border border-green-400 py-3 font-medium text-green-400 hover:bg-green-400 hover:text-black transition"
-          onClick={() => {
-            window.location.href = `/api/spotify/start?jobId=${jobId}&playlistName=${encodeURIComponent(
-              spotifyName,
-            )}`;
+          onClick={async () => {
+            const trackUris = result.finalSongs
+              .map((s: any) => s.trackUri)
+              .filter((uri: string) => uri?.startsWith("spotify:track:"));
+
+            try {
+              const res = await fetch("/api/spotify/start", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  playlistName: spotifyName,
+                  trackUris,
+                }),
+              });
+
+              if (!res.ok) {
+                throw new Error("Failed to start Spotify flow");
+              }
+
+              const { authUrl } = await res.json();
+
+              window.location.href = authUrl;
+            } catch (err) {
+              console.error(err);
+              alert("Something went wrong starting Spotify flow.");
+            }
           }}
         >
           Add to Spotify Library
