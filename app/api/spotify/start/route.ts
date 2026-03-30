@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { kv } from "@vercel/kv";
+import { createClient } from "@vercel/kv";
+
+const kv = createClient({
+  url: process.env.FP001_KV_REST_API_URL!,
+  token: process.env.FP001_KV_REST_API_TOKEN!,
+});
 
 export async function POST(req: Request) {
   try {
