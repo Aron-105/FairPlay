@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@vercel/kv";
 
 const kv = createClient({
-  url: process.env.FP001_KV_REST_API_URL!,
-  token: process.env.FP001_KV_REST_API_TOKEN!,
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
 });
 
 export async function GET(req: Request) {
@@ -12,9 +12,11 @@ export async function GET(req: Request) {
   const code = searchParams.get("code");
   const state = searchParams.get("state");
 
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL!;
+
   if (!code || !state) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=error`,
+      new URL("/spotify/success?status=error", baseUrl),
     );
   }
 
@@ -26,7 +28,7 @@ export async function GET(req: Request) {
   if (!stored) {
     console.error("Missing stored OAuth payload");
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=error`,
+      new URL("/spotify/success?status=error", baseUrl),
     );
   }
 
@@ -98,12 +100,12 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=success`,
+      new URL("/spotify/success?status=success", baseUrl),
     );
   } catch (err) {
     console.error("Spotify error:", err);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/spotify/success?status=error`,
+      new URL("/spotify/success?status=error", baseUrl),
     );
   }
 }
